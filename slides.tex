@@ -1,0 +1,718 @@
+\documentclass{beamer}
+\usetheme{metropolis}
+%\setsansfont[BoldFont={Fira Sans SemiBold}]{Fira Sans Book}
+%\setsansfont{Fontin}
+%\setsansfont{Gillius ADF No2}
+%\setsansfont{Phetsarath OT}
+\setsansfont{Source Sans Pro}
+\setmonofont{Source Code Pro}
+
+\hypersetup{colorlinks=true,
+            linkcolor=mRustLightOrange,
+            menucolor=mRustLightOrange,
+            pagecolor=mRustLightOrange,
+            urlcolor=mRustLightOrange}
+\usepackage{csquotes}
+\usepackage{comment}
+\usepackage{xcolor}
+\usepackage{minted}
+
+\usepackage{pdfcomment}
+\let\orignote\note
+\renewcommand<>{\note}[1]{\only#2{\tikz[remember
+picture,overlay]{\node{\pdfmargincomment[opacity=0]{#1}}}}\orignote#2{#1}}
+
+\AtBeginEnvironment{minted}{%
+  \renewcommand{\fcolorbox}[4][]{#4}}
+
+\newfontfamily\codefont{Source Code Pro}
+\newcommand\code[1]{\,{\color[HTML]{884400}#1}\,}
+\newcommand\source[1]{$\rightarrow$ via #1}
+
+\title{Lifetimes, anonymous functions and modularization}
+\date{\today}
+\author{Lukas Prokop}
+\institute{RustGraz community\vfill\hfill\includegraphics[height=2cm]{images/rustacean-orig-noshadow.png}}
+\begin{document}
+\maketitle
+
+%\section{Prologue}
+
+%\begin{frame}[standout]
+%  TODO My \mintinline{rust}{awesome!!()} question?
+%\end{frame}
+
+%\begin{frame}[fragile]{Recap: TODO topic}
+%  \begin{itemize}
+%    \item TODO \mintinline{rust}{Result} has two values \mintinline{rust}{Ok(T)} or \mintinline{rust}{Err(E)}
+%    \item TODO \mintinline{rust}{Option} has two values \mintinline{rust}{Some(T)} or \mintinline{rust}{None}
+%    \item TODO values are dispatched by pattern matching
+%  \end{itemize}
+
+%  \begin{minted}{rust}
+%fn propagate_error(req: HTTPRequest, s: Settings)
+%    -> Result<Response, std::error::Error>
+%{
+%  dispatch_route(req)?.handle()?.render()
+%}
+%  \end{minted}
+%\end{frame}
+
+%\begin{frame}[fragile]{TODO}
+%  TODO smaller source code
+%
+%  \begin{minted}[fontsize=\footnotesize]{rust}
+%  \end{minted}
+
+%  via \href{https://github.com/rust-lang/rust/blob/b613c989594f1cbf0d4af1a7a153786cca7792c8/src/librustc_ast_lowering/expr.rs#L1166}{expr.rs line 1166},
+%  \mintinline{text}{try {…}} is \href{https://github.com/rust-lang/rust/issues/31436}{experimental}.
+%\end{frame}
+
+
+\section{Dialogue}
+
+\begin{frame}[standout]
+  Cyclone
+\end{frame}
+
+\begin{frame}[fragile]{Slide from last time}
+  For the ambitious ones:
+  \begin{itemize}
+    \item Rust lifetimes are inspired by Cyclone's memory regions
+    \item I will talk about Cyclone next time
+    \item \href{https://www.usenix.org/legacy/event/usenix02/full_papers/jim/jim_html/}{Cyclone: A safe dialect of C} (2002)
+    \item \href{http://cyclone.thelanguage.org/}{Cyclone homepage}
+    \item Recommendation: read the Cyclone paper before next time
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Project overview}
+  \textbf{Cyclone:}
+  \begin{itemize}
+    \item \href{http://cyclone.thelanguage.org/}{Homepage} and \href{http://cyclone.thelanguage.org/wiki/User%20Manual/}{User Manual}
+    \item Jim, Morrisett, Grossman, Hicks, Cheney, Wang: \href{https://www.usenix.org/legacy/event/usenix02/full_papers/jim/jim_html/}{Cyclone: A Safe Dialect of C}. USENIX paper (2002)
+    \item Grossman, Morrisett, Jim, Hicks, Wang, Cheney: \href{https://dl.acm.org/doi/pdf/10.1145/512529.512563}{Region-based memory management in Cyclone.} ACM SIGPLAN paper (2002)
+    \item \enquote{Cyclone is no longer supported; the core research project has finished and the developers have moved on to other things. (Several of Cyclone's ideas have made their way into Rust.)}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Academic papers}
+  \begin{itemize}
+    \item Morrisett, Greg: \href{https://dl.acm.org/doi/abs/10.1145/586094.586096}{Analysis issues for cyclone.} ACM SIGPLAN-SIGSOFT workshop (2002)
+    \item Hicks, Morrisett, Grossman, Jim: \href{https://drum.lib.umd.edu/handle/1903/1304}{Safe and flexible memory management in Cyclone.} (2003)
+    \item Fluet, Wang: \href{http://www.cs.cornell.edu/people/fluet/research/safe-runtime/SPACE04/space04.pdf}{Implementation and performance evaluation of a safe runtime system in Cyclone.} SPACE workshop (2004).
+    \item Grossman, Hicks, Jim, Morrisett: \href{http://www.cs.umd.edu/~mwh/papers/cyclone-cuj.pdf}{Cyclone: A type-safe dialect of C.} C/C++ Users Journal (2005)
+    \item Swamy, Hicks, Morrisett, Grossman, Jim: \href{http://www.cs.umd.edu/projects/PL/cyclone/scp.pdf}{Safe manual memory management in Cyclone.} (2006)
+    \item Markle: \href{http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.367.3932&rep=rep1&type=pdf}{Experiences in a Real World Application of Cyclone: A Type-safe Dialect of C.} (2006) \note{Markle ported Quake II}
+    \item Gerakios, Papaspyrou, Sagonas: \href{http://www.softlab.ntua.gr/research/techrep/CSD-SW-TR-8-09.pdf}{Race-free and memory-safe multithreading: Design and implementation in Cyclone.} ACM SIGPLAN workshop.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Motivation and goal}
+  \begin{itemize}
+    \item ~[\dots] In short, the design of the C programming language encourages programming at the edge of safety.
+    \item Cyclone, a dialect of C that has been designed to prevent safety violations. \note{Our goal is to design Cyclone so that it has the safety guarantee of Java (no valid program can commit a safety violation) while keeping C’s syntax, types, semantics,and idioms intact.}
+    \item Cyclone has been in development for two years. In total, we have written about 110,000 lines of Cyclone code, with about 35,000 lines for the compiler itself, and 15,000 lines for supporting libraries and tools, like a port of the Bison parser generator.
+    \item The major differences between Cyclone and C are all related to safety. The Cyclone compiler performs a static analysis on source code, and inserts run-time checks into the compiled output at places where the analysis cannot determine that an operation is safe.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Motivation and goal}
+  Restrictions imposed by Cyclone to preserve safety:
+  \begin{itemize}
+    \item NULL checks are inserted to prevent segmentation faults
+    \item Pointer arithmetic is restricted
+    \item Pointers must be initialized before use
+    \item Dangling pointers are prevented through region analysis and limitations on free
+    \item Only \enquote{safe} casts and unions are allowed
+    \item \texttt{goto} into scopes is disallowed
+    \item switch labels in different scopes are disallowed
+    \item Pointer-returning functions must execute return
+    \item setjmp and longjmp are not supported
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Non-NULL pointer}
+  Function signature:
+  \begin{minted}{C}
+  int getc(FILE @);
+  \end{minted}
+  
+  Example scenarios:
+  \begin{minted}{C}
+  extern FILE *f;
+  getc(f);   // NULL check to be inserted
+  \end{minted}
+
+  \begin{minted}{C}
+  getc((FILE @)f);   // Check w/o warning
+  
+  FILE @g = (FILE @)f; // NULL check here
+  getc(g);               // No NULL check
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Buffer overflow prevention}
+  \begin{minted}{C}
+  int strlen(const char ?s) {
+    int i, n;
+    if (!s) return 0;
+    n = s.size;
+    for (i = 0; i < n; i++,s++)
+      if (!*s) return i;
+    return n;
+  }
+  \end{minted}
+  \note{To prevent buffer overflows, we restrict pointer arithmetic: Cyclone does not permit pointer arithmetic on *-pointers or @-pointers. Instead, we provide another kind of pointer, indicated by ?, which permits pointer arithmetic. A ?-pointer is represented by an address plus bounds information; since the representation of a ?-pointer takes up more space than a*-pointer or @-pointer, we call it a fat pointer.}
+\end{frame}
+
+\begin{frame}[fragile]{Dangling pointers}
+  \begin{minted}{C}
+char *itoa(int i) {
+  char buf[20];
+  sprintf(buf, "%d", i);
+  return buf;
+}
+  \end{minted}
+
+  \pause
+  \textbf{gcc:} warning: function returns address of local variable
+\end{frame}
+
+\begin{frame}[fragile]{Dangling pointers}
+  \begin{minted}{C}
+char *itoa(int i) {
+  char buf[20];
+  char *z;
+  sprintf(buf,"%d",i);
+  z = buf;
+  return z;
+}
+  \end{minted}
+
+  \textbf{gcc:} everything's okay
+
+  \note{Cyclone prevents the dereference of dangling pointers by performing a \textit{region analysis} on the code. }
+\end{frame}
+
+\begin{frame}[fragile]{Region analysis}
+  \begin{itemize}
+    \item A \emph{region} is a segment of memory that is deallocated all at once. \note{For example, Cyclone considers all of the local variables of a block to be in the same region, which is deallocated on exit from the block.}
+    \item Cyclone's static region analysis keeps track of what region each pointer points into, and what regions are live at any point in the program.\note{Any dereference of a pointer into a non-live region is reported as a compile-time error.}
+    \item Cyclone's region analysis is intraprocedural -- it is not a whole-program analysis. We rely on programmer annotations to track regions across function calls.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Region analysis}
+  \begin{minted}{C}
+char ?'r strcat(char ?'r dest,
+                const char ? src);
+  \end{minted}
+
+  \vspace{10pt}
+  \mintinline{rust}{'r} is a region variable
+  \vspace{10pt}
+
+  \begin{minted}{C}
+char ?itoa(int i) {
+  char buf[20];
+  sprintf(buf, "%d", i);
+  return strcat(buf, "");
+}
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Errors with free}
+  \textbf{Error 1:}
+  \begin{minted}{C}
+    free(ptr);
+    free(ptr);
+  \end{minted}
+
+  \textbf{Error 2:}
+  \begin{minted}{C}
+    void *ptr = calloc(42, sizeof(int));
+    if (ptr == NULL) { … }
+    free(ptr + 4);
+  \end{minted}
+  \note{C's free function can create dangling pointers, and, depending on how it is implemented, can cause segmentation faults or even root compromises if used incorrectly (e.g., if it is called with a pointer not returned by malloc, or if it is used to re-claim the same block of memory twice). It is difficult to design an analysis that can guarantee the correct use of pointers and free, so our current solution is drastic: we make free a no-op.}
+\end{frame}
+
+\begin{frame}[fragile]{Errors with free}
+  \begin{itemize}
+    \item free becomes a no-op \pause
+    \item option 1: optionally use an garbage collector \pause
+    \item option 2: Cyclone provides a feature called \emph{growable regions}
+  \end{itemize}
+
+  \pause
+  \begin{minted}{C}
+region h {
+  int *x = rmalloc(h, sizeof(int));
+  int ?y = rnew(h) { 1, 2, 3 };
+  char ?z = rprintf(h, "hello");
+}
+\end{minted}
+  %\note{Obviously, programmers still need a way to reclaim heap-allocated data. We provide two ways. First, the programmer can use an optional garbage collector. This is very helpful in getting existing C programs to port to Cyclone without many changes. However, in many cases it constitutes an unacceptable loss of control. We recognize that C programmers need explicit control over allocation and deallocation. Therefore, Cyclone provides a feature called growable regions. The following code declares a growable region, does some allocation into the region, and deallocates the region: The code uses a region block to start a new, growable region that lives on the heap. The region is deallocated on exit from the block (without an explicit free). The variable h is a handle for the region and it is used to allocate into the region, in one of several ways. First, there is an rmalloc construct that behaves like malloc except that it requires a region handle as an argument; it allocates into the region of the handle. In the example above, x is initialized with a pointer to an int-sized chunk of memory allocated in h’s region. Growable regions are a safe version of arena-style memory management, which is widely used (e.g., in Apache).}
+\end{frame}
+
+%  extern char *y; printf(y);
+
+\begin{frame}[standout]
+  Lifetimes
+\end{frame}
+
+\begin{frame}[fragile]{Borrowing, scopes, and lifetimes}
+  \begin{minted}{C}
+fn inc(a: u64) -> u64 {
+  return a + 1;
+}
+
+fn main() {
+  // <x>
+  let x = 41;
+  println!("{:?}", inc(x));
+  // </x>
+}
+  \end{minted}
+
+  \pause
+  A \textit{scope} is the memory frame local variables are defined in. \\
+  A \textit{lifetime} of a variable is the duration of time how long a value is available.
+  \note{For stack variables these concepts usually overlap}
+\end{frame}
+
+\begin{frame}[fragile]{Borrowing, scopes, and lifetimes}
+  \begin{minted}{C}
+fn get() -> Box<u64> {
+  // <x>
+  let x = 42;
+  return Box::new(x);
+}
+
+fn main() {
+  let y = get();
+  println!("{:?}", y);
+  // </x>
+}
+  \end{minted}
+
+  \pause
+  Each scope is defined through curly braces.
+  Each lifetime is (among others) introduced by a \mintinline{rust}{let}.
+\end{frame}
+
+\begin{frame}[fragile]{Borrowing, scopes, and lifetimes}
+  \textbf{Rust's definition of lifetimes:} named regions of code that a reference must be valid for. \note{rust restricts the concept to references}
+
+  \begin{itemize}
+    \item Lifetimes are mostly implicit
+      \begin{itemize}
+        \item Makes the topic (IMHO) confusing
+        \item Application of implicit rules is called \textit{lifetime elision}
+      \end{itemize}
+    \item A lifetime is denoted \mintinline{rust}{'a}
+      \begin{itemize}
+        \item \mintinline{rust}{a} as arbitrary name
+        \item used like a type argument → generics
+          \begin{itemize}
+            \item \mintinline{rust}{var<'a, 'b>}
+            \item clutters syntax $\implies$ implicit
+          \end{itemize}
+        \item Special name \mintinline{rust}{'static} for lifetime of program
+      \end{itemize}
+    \item C: no checks \\ rust: checked
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Motivation for lifetimes}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+fn get_config() -> HashMap<&str, &str> {
+  let data: HashMap<&str, &str> = read_config_file("config.csv");
+  let mut hash = HashMap::new();
+
+  if let Some(user) = data.get(&"user") {
+    hash.insert("username", user);
+  }
+  if let Some(pwd) = data.get(&"pwd") {
+    hash.insert("password", pwd);
+  }
+
+  hash
+}
+\end{minted}
+  How long is \texttt{user} and \texttt{pwd} going to live?
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 1}
+  \begin{minted}{rust}
+fn dump<'a>(x: &'a u64) {
+    println!("x={}", x);
+}
+
+fn main() {
+  dump();
+}
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 2}
+  \begin{minted}{rust}
+fn dump<'a, 'b>(x: &'a u64, y: &'b u64) {
+  println!("x={} y={}", x, y);
+}
+
+fn main() {
+  dump(&42, &72);
+}
+  \end{minted}
+  \note{two lifetime variables}
+\end{frame}
+
+
+\begin{frame}[fragile]{Lifetimes, example 3}
+  \begin{minted}{rust}
+fn dump<'a>(x: &'a u64, y: &'a u64) {
+  println!("x={} y={}", x, y);
+}
+
+fn main() {
+  let a = &42;
+  {
+    let b = &72;
+    {
+      dump(a, b);
+    }
+  }
+}
+  \end{minted}
+  \note{Coercion of lifetimes}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 4}
+  \begin{minted}{rust}
+fn long_a_but_short_number<'a>() {
+  // <number>
+  let number = 12;
+  let number_ref: &'a i32 = &number;
+  println!("{}", number_ref);
+  // </number>
+}
+  \end{minted}
+
+  Input arguments must outlive the borrower (function).
+  \note{We have have two values. 12 assigned to number and number\_ref is assigned to c. Now number is a value defined for the function scope. After println number will be dropped, right? Consider now reference number_ref. It enforces that ref number_ref must live as long as the lifetime a. Since number is dropped at the end of the scope, it does not live as long as a. Thus, this fails}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 4}
+  \begin{minted}[fontsize=\small]{text}
+error[E0597]: `number` does not live long enough
+ --> lifetimes_2.rs:4:29
+  |
+1 | fn long_a_but_short_number<'a>() {
+  | lifetime `'a` defined here --
+...
+4 |   let number_ref: &'a i32 = &number;
+  |               (1) -------   ^^^^^^^ (2)
+  |
+  | (1) type annotation requires that `number`
+  |     is borrowed for `'a`
+  |
+  | (2) borrowed value does not live long enough
+...
+7 | }
+  | - `number` dropped here while still borrowed
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 5}
+  \begin{minted}{rust}
+fn first<'a, 'b>
+   (x: &'a u64, _y: &'b u64)
+   -> &'a u64
+{
+  x
+}
+
+  \end{minted}
+  \note{Also return values}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 6}
+  \begin{minted}{rust}
+fn to_string<'a>(msg: &str) -> &'a String {
+  &String::from(msg)
+}
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes, example 6}
+  \begin{minted}{text}
+error[E0515]: cannot return reference to
+              temporary value
+ --> lifetimes_6.rs:2:3
+  |
+2 |   &String::from(msg)
+  |   ^-----------------
+  |   ||
+  |   |temporary value created here
+  |   returns a reference to data owned
+  |   by the current function
+
+error: aborting due to previous error
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes with structs}
+  \begin{minted}{rust}
+#[derive(Debug)]
+struct Borrowed<'a>(&'a i32);
+
+#[derive(Debug)]
+struct NamedBorrowed<'a> {
+  x: &'a i32,
+  y: &'a i32,
+}
+
+let x = 42;
+let y = 72;
+
+let single = Borrowed(&x);
+let double = NamedBorrowed { x: &x, y: &y };
+  \end{minted}
+  \note{A type Borrowed which houses a reference to an i32. The reference to i32 must outlive Borrowed.}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes with traits}
+  \begin{minted}{rust}
+#[derive(Debug)]
+struct Borrowed<'a> {
+  x: &'a i32,
+}
+
+impl<'a> Default for Borrowed<'a> {
+  fn default() -> Self {
+    Self {
+      x: &10,
+    }
+  }
+}
+  \end{minted}
+  \note{Example for traits}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes with bounds}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+struct Ref<'a, T: 'a>(&'a T);
+
+fn print<T>(t: T) where T: Debug {
+  println!("`print`: t is {:?}", t);
+}
+
+fn print_ref<'a, T>(t: &'a T)
+   where T: Debug + 'a
+{
+  println!("`print_ref`: t is {:?}", t);
+}
+
+fn main() {
+  let x = 7;
+  let ref_x = Ref(&x);
+
+  print_ref(&ref_x);
+  print(ref_x);
+}
+  \end{minted}
+  \note{
+[[reading this]] "T: 'a": All references in T must outlive lifetime 'a.
+"T: Trait + 'a": Type T must implement trait Trait and all references in T must outlive 'a.
+[Ref] Ref contains a reference to a generic type T that has an unknown lifetime a.
+T is bounded such that any *references* in T must outlive a.
+Additionally, the lifetime of Ref may not exceed a.
+[print] A generic function which prints using the Debug trait.
+[print\_ref] Here a reference to T is taken where T implements Debug and all *references* in T outlive 'a. In addition, 'a must outlive the function.
+}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes coercion}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+fn multiply<'a>(first: &'a i32, second: &'a i32) -> i32 {
+  first * second
+}
+
+fn choose_first<'a: 'b, 'b>
+   (first: &'a i32, _: &'b i32)
+   -> &'b i32
+{ first }
+
+fn main() {
+  let first = 2;
+  {
+    let second = 3;
+    println!("Product = {}", multiply(&first, &second));
+    println!("{} is 1st", choose_first(&first, &second));
+  };
+}
+  \end{minted}
+  \note{Rust infers a lifetime that is as short as possible. The two references are then coerced to that lifetime. Here, first has value 2 and has a longer lifetime than second which has value 3.  <'a: 'b, 'b> reads as lifetime 'a is at least as long as 'b. Here, we take in an \&'a i32 and return a \&'b i32 as a result of coercion.}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes static example}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+static NUM: u64 = 42;
+  
+fn main() {
+  let x: &'static str = "hello world";
+  println!("{}", x);
+
+  let y: &'static u64 = &NUM;
+  println!("{}", y);
+}
+  \end{minted}
+
+  \begin{itemize}
+    \item Make a constant with the static declaration.
+    \item Make a string literal which has type: \mintinline{rust}{&'static str}.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Lifetimes rules}
+  \textbf{For functions:}
+  \begin{itemize}
+    \item Any reference must have an annotated lifetime.
+    \item Any reference being returned must have the same lifetime as an input or be static.
+  \end{itemize}
+  \textbf{Elision:}
+  \begin{itemize}
+    \item Each elided lifetime in input position becomes a distinct lifetime parameter.
+    \item If there is exactly one input lifetime position (elided or not), that lifetime is assigned to all elided output lifetimes.
+    \item If there are multiple input lifetime positions, but one of them is \mintinline{rust}{&self} or \mintinline{rust}{&mut self}, the lifetime of \mintinline{rust}{self} is assigned to all elided output lifetimes.
+    \item Otherwise, it is an error to elide an output lifetime.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[standout]
+  Fn, FnMut and FnOnce
+\end{frame}
+
+\begin{frame}[fragile]{Closure example}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+fn main() {
+  let a = || { println!("Hello World!"); };
+  a();
+}
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Closure example}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+fn main() {
+  let a = |x| { println!("Hello {}!", x); };
+  a("foo");
+}
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Fn traits}
+  \begin{itemize}
+    \item \mintinline{rust}{FnOnce(self)} are functions that can be called once
+    \item \mintinline{rust}{FnMut(&mut self)} are functions that can be called if they have \mintinline{rust}{&mut} access to their environment
+    \item \mintinline{rust}{Fn(&self)} are functions that can be called if they only have \mintinline{rust}{&} access to their environment
+  \end{itemize}
+  Closures try to implement as many as possible. \\
+  Since both FnMut and FnOnce are supertraits of Fn, any instance of Fn can be used as a parameter where a FnMut or FnOnce is expected.
+\end{frame}
+
+\begin{frame}[fragile]{Fn traits}
+  The \mintinline{rust}{move} keyword:
+
+  \mintinline{rust}{move} means capture by value instead of by reference.
+  That is, the values are moved into the closure and go where it goes.
+  You can't freely move around a non-move closure because it references the stack.
+\end{frame}
+
+\begin{frame}[fragile]{move example}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+  let mut data = vec![1, 2, 3];
+
+  thread::spawn(move || {
+    data[0] += 1;
+  });
+
+  thread::sleep(Duration::from_millis(50));
+}
+  \end{minted}
+\end{frame}
+
+
+\begin{frame}[fragile]{FnOnce example}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+fn consume_with_relish<F>(func: F)
+    where F: FnOnce() -> String
+{
+  println!("Consumed: {}", func());
+  println!("Delicious!");
+}
+
+let x = String::from("x");
+let consume_and_return_x = move || x;
+consume_with_relish(consume_and_return_x);
+  \end{minted}
+  \note{[1] func consumes its captured variables, so it cannot be run more than once.
+[2] Attempting to invoke func() again will throw a "use of moved value" error for "func"}
+\end{frame}
+
+\begin{frame}[standout]
+  Modularization
+\end{frame}
+
+\begin{frame}[fragile]{FnOnce example}
+  \begin{minted}[fontsize=\scriptsize]{rust}
+mod mymodule {
+  pub fn test() {
+    println!("Hello World!");
+  }
+}
+
+fn main() {
+  mymodule::test();
+}
+  \end{minted}
+\end{frame}
+
+\section{Epilogue}
+
+
+\begin{frame}[fragile]{Quiz}
+  % for copy & paste: \mintinline{rust}{TODO}
+  \begin{description}
+    \item[Which keyword introduces a lifetime?] \hfill{} \\
+      ~\uncover<2->{\mintinline{rust}{let}}
+    \item[Bound \mintinline{rust}{<'a, T: 'a>} means] \hfill{} \\
+      ~\uncover<3->{All references in T must outlive 'a}
+    \item[The static bound lives how long?] \hfill{} \\
+      ~\uncover<4->{As long as the program}
+    \item[How do you wrap the arguments of a closure?] \hfill{} \\
+      ~\uncover<5->{With vertical bars}
+  \end{description}
+\end{frame}
+
+
+\begin{frame}[fragile]{Next time}
+  \begin{tabular}{ll}
+    Next meetup  & Wed, 2020/07/29 \\
+    Topic        & Concurrency
+  \end{tabular}
+\end{frame}
+
+\begin{frame}[standout]
+  Thank you!
+
+  \includegraphics[width=40pt]{images/rustacean-flat-happy.png}
+\end{frame}
+
+\end{document}
